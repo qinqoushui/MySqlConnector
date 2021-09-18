@@ -6,8 +6,14 @@ namespace MySqlConnector.Utilities;
 
 internal static class ActivitySourceHelper
 {
+	public const string DatabaseConnectionStringTagName = "db.connection_string";
+	public const string DatabaseNameTagName = "db.name";
 	public const string DatabaseSystemTagName = "db.system";
+	public const string DatabaseUserTagName = "db.user";
+	public const string NetPeerNameTagName = "net.peer.name";
+	public const string NetTransportTagName = "net.transport";
 	public const string StatusCodeTagName = "otel.status_code";
+	public const string ThreadIdTagName = "thread.id";
 
 	public const string DatabaseSystemValue = "mysql";
 

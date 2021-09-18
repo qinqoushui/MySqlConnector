@@ -389,12 +389,12 @@ public sealed class MySqlConnection : DbConnection, ICloneable
 			if (activity is { IsAllDataRequested: true })
 			{
 				var connectionStringBuilder = m_connectionSettings.ConnectionStringBuilder;
-				activity.SetTag("db.connection_string", connectionStringBuilder.GetConnectionString(connectionStringBuilder.PersistSecurityInfo));
-				activity.SetTag("db.user", connectionStringBuilder.UserID);
-				activity.SetTag("db.name", m_connectionSettings.Database);
-				activity.SetTag("net.peer.name", connectionStringBuilder.Server);
-				activity.SetTag("net.transport", "ip_tcp");
-				activity.SetTag("thread.id", Environment.CurrentManagedThreadId);
+				activity.SetTag(ActivitySourceHelper.DatabaseConnectionStringTagName, connectionStringBuilder.GetConnectionString(connectionStringBuilder.PersistSecurityInfo));
+				activity.SetTag(ActivitySourceHelper.DatabaseUserTagName, connectionStringBuilder.UserID);
+				activity.SetTag(ActivitySourceHelper.DatabaseNameTagName, m_connectionSettings.Database);
+				activity.SetTag(ActivitySourceHelper.NetPeerNameTagName, connectionStringBuilder.Server);
+				activity.SetTag(ActivitySourceHelper.NetTransportTagName, "ip_tcp");
+				activity.SetTag(ActivitySourceHelper.ThreadIdTagName, Environment.CurrentManagedThreadId);
 			}
 
 			// check if there is an open session (in the current transaction) that can be adopted

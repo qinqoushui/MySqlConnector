@@ -65,6 +65,7 @@ internal sealed class ServerSession
 	public bool SupportsDeprecateEof => m_supportsDeprecateEof;
 	public bool SupportsSessionTrack => m_supportsSessionTrack;
 	public bool ProcAccessDenied { get; set; }
+	public IEnumerable<KeyValuePair<string, object?>>? ActivityTags { get; private set; }
 
 #if NETCOREAPP2_1_OR_GREATER || NETSTANDARD2_1_OR_GREATER
 	public ValueTask ReturnToPoolAsync(IOBehavior ioBehavior, MySqlConnection? owningConnection)
@@ -521,6 +522,16 @@ internal sealed class ServerSession
 				await GetRealServerDetailsAsync(ioBehavior, CancellationToken.None).ConfigureAwait(false);
 
 			m_payloadHandler.ByteHandler.RemainingTimeout = Constants.InfiniteTimeout;
+
+			ActivityTags = new KeyValuePair<string, object?>[]
+			{
+				new(ActivitySourceHelper.DatabaseSystemTagName, ActivitySourceHelper.DatabaseSystemValue),
+				new(ActivitySourceHelper.DatabaseConnectionStringTagName, cs.ConnectionStringBuilder.GetConnectionString(cs.ConnectionStringBuilder.PersistSecurityInfo)),
+				new(ActivitySourceHelper.DatabaseNameTagName, cs.Database),
+				new(ActivitySourceHelper.DatabaseUserTagName, cs.UserID),
+				new(ActivitySourceHelper.NetPeerNameTagName, cs.HostNames?.Count > 0 ? cs.HostNames[0] : ""), // TODO
+				new(ActivitySourceHelper.NetTransportTagName, "ip_tcp"), // TODO
+			};
 		}
 		catch (ArgumentException ex)
 		{

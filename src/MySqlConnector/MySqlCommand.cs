@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
@@ -318,8 +319,14 @@ public sealed class MySqlCommand : DbCommand, IMySqlCommand, ICancellableCommand
 		if (!IsValid(out var exception))
 			return Utility.TaskFromException<MySqlDataReader>(exception);
 
+		var activity = ActivitySourceHelper.ActivitySource.StartActivity(ActivitySourceHelper.ExecuteActivityName, ActivityKind.Client, default(ActivityContext), Connection!.Session.ActivityTags);
+		if (activity is { IsAllDataRequested: true })
+		{
+			activity.SetTag("db.statement", CommandText);
+			activity.SetTag(ActivitySourceHelper.ThreadIdTagName, Environment.CurrentManagedThreadId);
+		}
 		m_commandBehavior = behavior;
-		return CommandExecutor.ExecuteReaderAsync(new IMySqlCommand[] { this }, SingleCommandPayloadCreator.Instance, behavior, ioBehavior, cancellationToken);
+		return CommandExecutor.ExecuteReaderAsync(new IMySqlCommand[] { this }, SingleCommandPayloadCreator.Instance, behavior, activity, ioBehavior, cancellationToken);
 	}
 
 	public MySqlCommand Clone() => new(this);
