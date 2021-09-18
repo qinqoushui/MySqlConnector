@@ -30,6 +30,12 @@ internal static class ActivitySourceHelper
 		activity.SetTag("exception.stacktrace", exception.StackTrace);
 	}
 
-	private static readonly AssemblyName AssemblyName = typeof(ActivitySourceHelper).Assembly.GetName();
-	public static readonly ActivitySource ActivitySource = new("X-MySqlConnector-v1", AssemblyName.Version!.ToString());
+	public static readonly ActivitySource ActivitySource = CreateActivitySource();
+
+	private static ActivitySource CreateActivitySource()
+	{
+		var assembly = typeof(ActivitySourceHelper).Assembly;
+		var version = assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()!.Version;
+		return new("X-MySqlConnector-v1", version);
+	}
 }
