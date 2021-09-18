@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -375,47 +376,69 @@ public sealed class MySqlConnection : DbConnection, ICloneable
 		if (State != ConnectionState.Closed)
 			throw new InvalidOperationException("Cannot Open when State is {0}.".FormatInvariant(State));
 
-		var openStartTickCount = Environment.TickCount;
-
-		SetState(ConnectionState.Connecting);
-
-		var pool = ConnectionPool.GetPool(m_connectionString);
-		m_connectionSettings ??= pool?.ConnectionSettings ?? new ConnectionSettings(new MySqlConnectionStringBuilder(m_connectionString));
-
-		// check if there is an open session (in the current transaction) that can be adopted
-		if (m_connectionSettings.AutoEnlist && System.Transactions.Transaction.Current is not null)
-		{
-			var existingConnection = FindExistingEnlistedSession(System.Transactions.Transaction.Current);
-			if (existingConnection is not null)
-			{
-				TakeSessionFrom(existingConnection);
-				m_hasBeenOpened = true;
-				SetState(ConnectionState.Open);
-				return;
-			}
-		}
-
+		using var activity = ActivitySourceHelper.ActivitySource.StartActivity(ActivitySourceHelper.OpenActivityName, ActivityKind.Client, default(ActivityContext), ActivitySourceHelper.DefaultTags);
 		try
 		{
-			m_session = await CreateSessionAsync(pool, openStartTickCount, ioBehavior, cancellationToken).ConfigureAwait(false);
+			var openStartTickCount = Environment.TickCount;
 
-			m_hasBeenOpened = true;
-			SetState(ConnectionState.Open);
+			SetState(ConnectionState.Connecting);
+
+			var pool = ConnectionPool.GetPool(m_connectionString);
+			m_connectionSettings ??= pool?.ConnectionSettings ?? new ConnectionSettings(new MySqlConnectionStringBuilder(m_connectionString));
+
+			if (activity is { IsAllDataRequested: true })
+			{
+				var connectionStringBuilder = m_connectionSettings.ConnectionStringBuilder;
+				activity.SetTag("db.connection_string", connectionStringBuilder.GetConnectionString(connectionStringBuilder.PersistSecurityInfo));
+				activity.SetTag("db.user", connectionStringBuilder.UserID);
+				activity.SetTag("db.name", m_connectionSettings.Database);
+				activity.SetTag("net.peer.name", connectionStringBuilder.Server);
+				activity.SetTag("net.transport", "ip_tcp");
+				activity.SetTag("thread.id", Environment.CurrentManagedThreadId);
+			}
+
+			// check if there is an open session (in the current transaction) that can be adopted
+			if (m_connectionSettings.AutoEnlist && System.Transactions.Transaction.Current is not null)
+			{
+				var existingConnection = FindExistingEnlistedSession(System.Transactions.Transaction.Current);
+				if (existingConnection is not null)
+				{
+					TakeSessionFrom(existingConnection);
+					m_hasBeenOpened = true;
+					SetState(ConnectionState.Open);
+					return;
+				}
+			}
+
+			try
+			{
+				m_session = await CreateSessionAsync(pool, openStartTickCount, ioBehavior, cancellationToken).ConfigureAwait(false);
+
+				m_hasBeenOpened = true;
+				SetState(ConnectionState.Open);
+			}
+			catch (MySqlException)
+			{
+				SetState(ConnectionState.Closed);
+				cancellationToken.ThrowIfCancellationRequested();
+				throw;
+			}
+			catch (SocketException)
+			{
+				SetState(ConnectionState.Closed);
+				throw new MySqlException(MySqlErrorCode.UnableToConnectToHost, "Unable to connect to any of the specified MySQL hosts.");
+			}
+
+			if (m_connectionSettings.AutoEnlist && System.Transactions.Transaction.Current is not null)
+				EnlistTransaction(System.Transactions.Transaction.Current);
+
+			activity.SetSuccess();
 		}
-		catch (MySqlException)
+		catch (Exception ex) when (activity is { IsAllDataRequested: true })
 		{
-			SetState(ConnectionState.Closed);
-			cancellationToken.ThrowIfCancellationRequested();
+			activity.SetException(ex);
 			throw;
 		}
-		catch (SocketException)
-		{
-			SetState(ConnectionState.Closed);
-			throw new MySqlException(MySqlErrorCode.UnableToConnectToHost, "Unable to connect to any of the specified MySQL hosts.");
-		}
-
-		if (m_connectionSettings.AutoEnlist && System.Transactions.Transaction.Current is not null)
-			EnlistTransaction(System.Transactions.Transaction.Current);
 	}
 
 	/// <summary>
