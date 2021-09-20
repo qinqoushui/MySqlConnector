@@ -31,9 +31,12 @@ internal static class ActivitySourceHelper
 	{
 		activity.SetTag(StatusCodeTagName, "ERROR");
 		activity.SetTag("otel.status_description", exception is MySqlException mySqlException ? mySqlException.ErrorCode.ToString() : exception.Message);
-		activity.SetTag("exception.type", exception.GetType().FullName);
-		activity.SetTag("exception.message", exception.Message);
-		activity.SetTag("exception.stacktrace", exception.StackTrace);
+		activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
+		{
+			{ "exception.type", exception.GetType().FullName },
+			{ "exception.message", exception.Message },
+			{ "exception.stacktrace", exception.ToString() },
+		}));
 	}
 
 	public static readonly ActivitySource ActivitySource = CreateActivitySource();
